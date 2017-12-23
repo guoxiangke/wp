@@ -19,7 +19,7 @@
  * @property-read array  $tags_list The tags in string list format
  * @property-read string $scope_name The name of the scope
  */
-class Snippet {
+class Code_Snippet {
 
 	/**
 	 * The snippet metadata fields.
@@ -128,7 +128,12 @@ class Snippet {
 		$field = $this->validate_field_name( $field );
 
 		if ( ! $this->is_allowed_field( $field ) ) {
-			throw new ErrorException( 'Trying to set invalid property on Snippets class: ' . $field, 0, E_WARNING );
+
+			if ( WP_DEBUG ) {
+				trigger_error( 'Trying to set invalid property on Snippets class: ' . esc_html( $field ), E_WARNING );
+			}
+
+			return;
 		}
 
 		/* Check if the field value should be filtered */

@@ -90,8 +90,8 @@ class Code_Snippets_Contextual_Help {
 		);
 
 		$snippet_host_list = '';
-		foreach ( $snippet_host_links as $link => $title ) {
-			$snippet_host_list .= sprintf( '<li><a href="%s"></a></li>\n', esc_url( $link ), esc_html( $title ) );
+		foreach ( $snippet_host_links as $title => $link ) {
+			$snippet_host_list .= sprintf( '<li><a href="%s">%s</a></li>', esc_url( $link ), esc_html( $title ) );
 		}
 
 		$this->screen->add_help_tab( array(
@@ -99,7 +99,7 @@ class Code_Snippets_Contextual_Help {
 			'title'   => __( 'Finding Snippets', 'code-snippets' ),
 			'content' => '<p>' . __( 'Here are some links to websites which host a large number of snippets that you can add to your site:', 'code-snippets' ) .
 			             '<ul>' . $snippet_host_list . '</ul>' .
-			             __( 'More places to find snippets, as well as a selection of example snippets, can be found in the <a href="https://github.com/sheabunge/code-snippets/wiki/Finding-snippets">plugin documentation</a>', 'code-snippets' ) . '</p>',
+			             __( 'More places to find snippets, as well as a selection of example snippets, can be found in the <a href="https://github.com/sheabunge/code-snippets/wiki/Finding-snippets">plugin documentation</a>.', 'code-snippets' ) . '</p>',
 		) );
 
 		$this->screen->add_help_tab( array(

@@ -47,7 +47,7 @@ class Code_Snippets_DB {
 		}
 
 		/* If $multisite is null, try to base it on the current admin page */
-		if ( is_null( $network ) && function_exists( 'get_current_screen' ) ) {
+		if ( is_null( $network ) && get_current_screen() ) {
 			$network = get_current_screen()->in_admin( 'network' );
 		}
 
@@ -115,21 +115,11 @@ class Code_Snippets_DB {
 	 * @uses dbDelta() to apply the SQL code
 	 *
 	 * @param string $table_name The name of the table to create
+	 * @return bool whether the table creation was successful
 	 */
 	function create_table( $table_name ) {
 		global $wpdb;
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-
-		/* Set the database charset */
-		$charset_collate = '';
-
-		if ( ! empty( $wpdb->charset ) ) {
-			$charset_collate = "DEFAULT CHARACTER SET $wpdb->charset";
-		}
-
-		if ( ! empty( $wpdb->collate ) ) {
-			$charset_collate .= " COLLATE $wpdb->collate";
-		}
+		$charset_collate = $wpdb->get_charset_collate();
 
 		/* Create the database table */
 		$sql = "CREATE TABLE $table_name (
@@ -143,7 +133,15 @@ class Code_Snippets_DB {
 				PRIMARY KEY  (id)
 			) $charset_collate;";
 
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
-		do_action( 'code_snippets/create_table', $table_name );
+
+		$success = empty( $wpdb->last_error );
+
+		if ( $success ) {
+			do_action( 'code_snippets/create_table', $table_name );
+		}
+
+		return $success;
 	}
 }

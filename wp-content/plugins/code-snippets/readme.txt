@@ -3,8 +3,8 @@ Contributors: bungeshea
 Donate link: https://bungeshea.com/donate/
 Tags: code-snippets, snippets, code, php, network, multisite
 Requires at least: 3.6
-Tested up to: 4.8-beta1
-Stable tag: 2.8.6
+Tested up to: 4.8.1
+Stable tag: 2.9.4
 License: MIT
 License URI: license.txt
 
@@ -26,6 +26,7 @@ If you have any feedback, issues, or suggestions for improvements please leave a
 
 Code Snippets can be used in these different languages thanks to the following translators:
 
+* French (Canada) - [Dominic Desbiens](http://www.dominicdesbiens.com/)
 * Indonesian - [Jordan Silaen from ChameleonJohn.com](https://www.chameleonjohn.com/)
 * German - [Mario Siegmann](http://web-alltag.de/), [Joerg Knoerchen](http://www.sensorgrafie.de/), and [David Decker](http://deckerweb.de)
 * Dutch - [Sander Spies](https://github.com/sander1)
@@ -108,6 +109,30 @@ That's fantastic! Fork the [repository on GitHub](http://github.com/sheabunge/co
 4. Importing snippets from an XML file
 
 == Changelog ==
+
+= 2.9.4 (19 Sep 2017) =
+* Fixed: Prevented PHP error from occurring when saving a snippet
+* Minor improvements to database creation function
+
+= 2.9.3 (11 Sep 2017) =
+* Fixed: Prevent snippets from being executed twice when saving due to invalid ID being passed to allow_execute_snippet filter
+* Fixed: Re-enabled output suppression when executing snippets
+
+= 2.9.2 (8 Sep 2017) =
+* Fixed: Do not attempt to combine queries for fetching local and multisite snippets
+
+= 2.9.1 (7 Sep 2017) =
+* Fixed: Prevent illegal mix of collations errors when fetching snippets from database tables with different collations [[#](https://wordpress.org/support/topic/issue-on-multisite-with-wpml/)]
+
+= 2.9.0 (6 Sep 2017) =
+* Fixed: Prevented invalid properties from being set when saving a snippet
+* Fixed: Use the correct protocol when saving a snippet
+* Improved: Moved code to disable snippet execution into a filter hook
+* Fixed: Active shared snippets not being updated correctly
+* Improved: execute_active_snippets() function updated with improved efficiency
+* Improved: Renamed Snippet class to avoid name collisions with other plugins
+* Improved: Don't hide output when executing a snippet
+* Updated CodeMirror to version 5.28.0
 
 = 2.8.6 (14 May 2017) =
 * Ensure that get_snippets() function retrieves snippets with the correct 'network' setting. Fixes snippet edit links in network admin.

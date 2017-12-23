@@ -52,7 +52,7 @@ function get_snippets( array $ids = array(), $multisite = null ) {
 	/* Convert snippets to snippet objects */
 	foreach ( $snippets as $index => $snippet ) {
 		$snippet['network'] = $multisite;
-		$snippets[ $index ] = new Snippet( $snippet );
+		$snippets[ $index ] = new Code_Snippet( $snippet );
 	}
 
 	return apply_filters( 'code_snippets/get_snippets', $snippets, $multisite );
@@ -117,7 +117,8 @@ function code_snippets_build_tags_array( $tags ) {
  *
  * @param  int          $id        The ID of the snippet to retrieve. 0 to build a new snippet
  * @param  boolean|null $multisite Retrieve a multisite-wide or site-wide snippet?
- * @return Snippet                 A single snippet object
+ *
+ * @return Code_Snippet                 A single snippet object
  */
 function get_snippet( $id = 0, $multisite = null ) {
 	/** @var wpdb $wpdb */
@@ -132,12 +133,12 @@ function get_snippet( $id = 0, $multisite = null ) {
 		$snippet = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id = %d", $id ) );
 
 		/* Unescape the snippet data, ready for use */
-		$snippet = new Snippet( $snippet );
+		$snippet = new Code_Snippet( $snippet );
 
 	} else {
 
 		/* Get an empty snippet object */
-		$snippet = new Snippet();
+		$snippet = new Code_Snippet();
 	}
 
 	$snippet->network = $multisite;
@@ -254,10 +255,11 @@ function delete_snippet( $id, $multisite = null ) {
  * @uses $wpdb to update/add the snippet to the database
  * @uses code_snippets()->db->get_table_name() To dynamically retrieve the name of the snippet table
  *
- * @param  Snippet   $snippet   The snippet to add/update to the database
+ * @param  Code_Snippet $snippet   The snippet to add/update to the database
+ *
  * @return int                  The ID of the snippet
  */
-function save_snippet( Snippet $snippet ) {
+function save_snippet( Code_Snippet $snippet ) {
 	/** @var wpdb $wpdb */
 	global $wpdb;
 
@@ -305,7 +307,7 @@ function update_snippet_fields( $snippet_id, $fields, $network = null ) {
 	$table = code_snippets()->db->get_table_name( $network );
 
 	/* Build a new snippet object for the validation */
-	$snippet = new Snippet();
+	$snippet = new Code_Snippet();
 	$snippet->id = $snippet_id;
 
 	/* Validate fields through the snippet class and copy them into a clean array */
@@ -351,7 +353,7 @@ function import_snippets( $file, $multisite = null ) {
 
 	/** @var DOMElement $snippet_xml */
 	foreach ( $snippets_xml as $snippet_xml ) {
-		$snippet = new Snippet();
+		$snippet = new Code_Snippet();
 		$snippet->network = $multisite;
 
 		/* Build a snippet object by looping through the field names */
@@ -362,7 +364,7 @@ function import_snippets( $file, $multisite = null ) {
 
 			/* If the field element exists, add it to the snippet object */
 			if ( isset( $field->nodeValue ) ) {
-				$snippet->$field_name = $field->nodeValue;
+				$snippet->set_field( $field_name, $field->nodeValue );
 			}
 		}
 
@@ -412,19 +414,27 @@ function export_snippets( $ids, $multisite = null, $format = 'xml' ) {
  *
  * @since 2.0
  *
- * @param  string $code The snippet code to execute
- * @param  int    $id   The snippet ID
+ * @param string $code         The snippet code to execute
+ * @param int    $id           The snippet ID
+ * @param bool   $catch_output Whether to attempt to suppress the output of execution using buffers
+ *
  * @return mixed        The result of the code execution
  */
-function execute_snippet( $code, $id = 0 ) {
+function execute_snippet( $code, $id = 0, $catch_output = true ) {
 
 	if ( empty( $code ) ) {
 		return false;
 	}
 
-	ob_start();
+	if ( $catch_output ) {
+		ob_start();
+	}
+
 	$result = eval( $code );
-	ob_end_clean();
+
+	if ( $catch_output ) {
+		ob_end_clean();
+	}
 
 	do_action( 'code_snippets/after_execute_snippet', $id, $code, $result );
 
@@ -440,12 +450,7 @@ function execute_snippet( $code, $id = 0 ) {
  */
 function execute_active_snippets() {
 
-	/* Bail early if safe mode is active */
-	if ( defined( 'CODE_SNIPPETS_SAFE_MODE' ) && CODE_SNIPPETS_SAFE_MODE ) {
-		return false;
-	}
-
-	if ( isset( $_GET['snippets-safe-mode'] ) && $_GET['snippets-safe-mode'] && code_snippets()->current_user_can() ) {
+	if ( ! apply_filters( 'code_snippets/execute_snippets', true ) ) {
 		return false;
 	}
 
@@ -453,77 +458,51 @@ function execute_active_snippets() {
 	global $wpdb;
 
 	$current_scope = is_admin() ? 1 : 2;
-
-	/* Check if the snippets tables exist */
-	$table_exists = $wpdb->get_var( "SHOW TABLES LIKE '$wpdb->snippets'" ) === $wpdb->snippets;
-	$ms_table_exists = is_multisite() && $wpdb->get_var( "SHOW TABLES LIKE '$wpdb->ms_snippets'" ) === $wpdb->ms_snippets;
-	$sql = '';
+	$queries = array();
 
 	/* Fetch snippets from site table */
-	if ( $table_exists ) {
-		$sql = $wpdb->prepare( "SELECT id, code FROM {$wpdb->snippets} WHERE active=1 AND (scope=0 OR scope=%d)", $current_scope );
+	if ( $wpdb->get_var( "SHOW TABLES LIKE '$wpdb->snippets'" ) === $wpdb->snippets ) {
+		$queries[ $wpdb->snippets ] = $wpdb->prepare( "SELECT id, code FROM {$wpdb->snippets} WHERE (scope=0 OR scope=%d) AND active=1", $current_scope );
 	}
 
 	/* Fetch snippets from the network table */
-	if ( $ms_table_exists ) {
+	if ( is_multisite() && $wpdb->get_var( "SHOW TABLES LIKE '$wpdb->ms_snippets'" ) === $wpdb->ms_snippets ) {
+		$active_shared_ids = get_option( 'active_shared_network_snippets', array() );
 
-		if ( ! empty( $sql ) ) {
-			$sql .= ' UNION ALL ';
-		}
+		/* If there are active shared snippets, include them in the query */
+		if ( count( $active_shared_ids ) ) {
 
-		/* Only select snippets in the current scope */
-		$sql .= $wpdb->prepare( "SELECT id, code FROM {$wpdb->ms_snippets} WHERE active=1 AND (scope=0 OR scope=%d)", $current_scope );
+			/* Build a list of "%d, %d, %d ..." for every active network shared snippet we have */
+			$active_shared_ids_format = implode( ',', array_fill( 0, count( $active_shared_ids ), '%d' ) );
 
-		/* Add shared network snippets */
-		if ( $active_shared_ids = get_option( 'active_shared_network_snippets', false ) ) {
-			$sql .= ' UNION ALL ';
-			$sql .= $wpdb->prepare(
-				sprintf(
-					"SELECT id, code FROM {$wpdb->ms_snippets} WHERE id IN (%s)",
-					implode( ',', array_fill( 0, count( $active_shared_ids ), '%d' ) )
-				),
-				$active_shared_ids
-			);
+			/* Include them in the query */
+			$sql = "SELECT id, code FROM {$wpdb->snippets} WHERE (scope=0 OR scope=%d) AND (active=1 OR id IN ($active_shared_ids_format))";
+
+			/* Add the scope number to the IDs array, so that it is the first variable in the query */
+			array_unshift( $active_shared_ids, $current_scope );
+			$queries[ $wpdb->ms_snippets ] = $wpdb->prepare( $sql, $active_shared_ids );
+
+		} else {
+			$sql = "SELECT id, code  FROM {$wpdb->ms_snippets} WHERE (scope=0 OR scope=%d) AND active=1";
+			$queries[ $wpdb->ms_snippets ] = $wpdb->prepare( $sql, $current_scope );
 		}
 	}
 
-	/* Return false if there is no query */
-	if ( empty( $sql ) ) {
-		return false;
-	}
+	foreach ( $queries as $table_name => $query ) {
+		$active_snippets = $wpdb->get_results( $query, ARRAY_A );
 
-	/* Grab the snippets from the database */
-	$active_snippets = $wpdb->get_results( $sql, OBJECT_K );
+		/* Loop through the returned snippets and execute the PHP code */
+		foreach ( $active_snippets as $snippet ) {
+			$snippet_id = intval( $snippet['id'] );
+			$code = $snippet['code'];
 
-	/* Loop through the returned snippets and execute the PHP code */
-	foreach ( $active_snippets as $snippet_id => $snippet ) {
-
-		if ( apply_filters( 'code_snippets/allow_execute_snippet', true, $snippet_id ) ) {
-			execute_snippet( $snippet->code, $snippet_id );
+			if ( apply_filters( 'code_snippets/allow_execute_snippet', true, $snippet_id, $table_name ) ) {
+				execute_snippet( $code, $snippet_id );
+			}
 		}
 	}
 
 	return true;
 }
 
-
-if ( isset( $_REQUEST['snippets-safe-mode'] ) ) {
-
-	/**
-	 * Inject the safe mode query var into URLs
-	 *
-	 * @param $url
-	 *
-	 * @return string
-	 */
-	function code_snippets_safe_mode_query_var( $url ) {
-		if ( isset( $_REQUEST['snippets-safe-mode'] ) ) {
-			return add_query_arg( 'snippets-safe-mode', $_REQUEST['snippets-safe-mode'], $url );
-		}
-		return $url;
-	}
-
-	add_filter( 'home_url', 'code_snippets_safe_mode_query_var' );
-	add_filter( 'admin_url', 'code_snippets_safe_mode_query_var' );
-}
 
