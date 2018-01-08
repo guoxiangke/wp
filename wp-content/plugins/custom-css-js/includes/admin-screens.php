@@ -576,6 +576,24 @@ class CustomCSSandJS_Admin {
         }
         $language = $this->get_language($post_id);
 
+        // Replace the htmlentities (https://wordpress.org/support/topic/annoying-bug-in-text-editor/), but only selectively
+        if ( strstr($post->post_content, '&') ) {
+
+            // First the ampresands
+            $post->post_content = str_replace('&amp', htmlentities('&amp'), $post->post_content );
+
+            // Then the rest of the entities
+            $entities = get_html_translation_table(HTML_ENTITIES, ENT_QUOTES | ENT_HTML5 );
+            unset( $entities[ array_search('&amp;', $entities) ]);
+            $regular_expression = str_replace(';', '', '/('.implode('|', $entities).')/i');
+            preg_match_all($regular_expression, $post->post_content, $matches);
+            if ( isset($matches[0]) && count($matches[0]) > 0 ) {
+                foreach($matches[0] as $_entity) {
+                    $post->post_content = str_replace($_entity, htmlentities($_entity), $post->post_content);
+                }
+            }
+        }
+
         switch ( $language ) {
             case 'js' :
                 if ( $new_post ) {
